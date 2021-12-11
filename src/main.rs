@@ -52,7 +52,8 @@ async fn get_total_players(servers: Vec<ServerEntry>, cli: Arc<Client>) -> usize
     let mut sum: usize = 0;
 
     for x in handles {
-        let val = x.await;
+        // As these are from tokio::spawn, we don't have to worry about some sort of magic join function.
+        let val = x.await; 
         sum += val.unwrap_or(0);
     }
 
