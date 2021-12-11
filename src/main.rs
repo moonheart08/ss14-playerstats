@@ -3,6 +3,7 @@ use warp::Filter;
 use reqwest::{Url, Client};
 use serde::{Deserialize};
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Deserialize, Debug)]
 struct Response {
@@ -35,26 +36,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn get_total_players(servers: Vec<ServerEntry>, cli: Arc<Client>) -> usize {
-
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let mut handles = vec![];
     for x in servers {
         let e = x.clone();
-        let tx = tx.clone();
         let cli = cli.clone();
         let handle = tokio::spawn( async move {
             if let Ok(url) = Url::from_str(&e.address) {
-                tx.send(query_player_stats(url, cli).await.unwrap_or(0)).unwrap();
+                return query_player_stats(url, cli).await.unwrap_or(0);
             }
+            return 0;
         });
         handles.push(handle);
     }
-    drop(tx);
 
     let mut sum: usize = 0;
 
-    while let Some(v) = rx.recv().await {
-        sum += v;
+    for x in handles {
+        let val = x.await;
+        sum += val.unwrap_or(0);
     }
 
     return sum;
@@ -63,7 +62,7 @@ async fn get_total_players(servers: Vec<ServerEntry>, cli: Arc<Client>) -> usize
 
 async fn query_player_stats(url: Url, cli: Arc<Client>) -> Result<usize, Box<dyn std::error::Error>> {
     if let Some(url) = filter_url(url) {
-        let body: Response = cli.get(url).send().await?.json().await?;
+        let body: Response = cli.get(url).timeout(Duration::new(5, 0)).send().await?.json().await?;
         return Ok(body.players);
     } else {
         return Ok(0); //Server couldn't be got so just pretend it has nobody on
